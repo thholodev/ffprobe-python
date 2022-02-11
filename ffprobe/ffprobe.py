@@ -48,25 +48,13 @@ class FFProbe:
                 line = line.decode('UTF-8', 'ignore')
 
                 if '[STREAM]' in line:
-                    side_data = False
                     stream = True
                     data_lines = []
                 elif '[/STREAM]' in line and stream:
-                    side_data = False
                     stream = False
                     self.streams.append(FFStream(data_lines))
-                elif '[SIDE_DATA]' in line:
-                    side_data = True
-                    stream = False
-                    side_data_lines = []
-                elif '[/SIDE_DATA]' in line:
-                    side_data = False
-                    stream = False
-                    self.side_data.append(FFSideData(side_data_lines))
                 elif stream and "=" in line:
                     data_lines.append(line)
-                elif side_data and "=" in line:
-                    side_data_lines.append(line)
 
             self.metadata = {}
             is_metadata = False
@@ -200,6 +188,16 @@ class FFStream:
 
         return size
 
+    def frame_rotation(self):
+        """
+        Returns the rotation as an integer if the stream is a video stream.
+        Returns None if it is not a video stream or the rotation does not exist
+        """
+        if self.is_video():
+            return int(self.__dict__.get('rotation', 0))
+        else:
+            return None
+
     def pixel_format(self):
         """
         Returns a string representing the pixel format of the video stream. e.g. yuv420p.
@@ -272,20 +270,3 @@ class FFStream:
             return int(self.__dict__.get('bit_rate', ''))
         except ValueError:
             raise FFProbeError('None integer bit_rate')
-
-
-class FFSideData:
-    """
-    An object representation of the side data in an individual stream in a multimedia file.
-    """
-
-    def __init__(self, data_lines):
-        for line in data_lines:
-            self.__dict__.update({key: value for key, value, *_ in [line.strip().split('=')]})
-
-    def rotation(self):
-        """
-        Returns the rotation as an integer if the stream is a video stream.
-        Returns None if it is not a video stream or the rotation does not exist
-        """
-        return self.__dict__.get('rotation')
