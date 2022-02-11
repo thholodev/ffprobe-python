@@ -38,6 +38,7 @@ class FFProbe:
             stream = False
             ignoreLine = False
             self.streams = []
+            self.side_data = []
             self.video = []
             self.audio = []
             self.subtitle = []
@@ -47,21 +48,25 @@ class FFProbe:
                 line = line.decode('UTF-8', 'ignore')
 
                 if '[STREAM]' in line:
+                    side_data = False
                     stream = True
-                    ignoreLine = False
                     data_lines = []
                 elif '[/STREAM]' in line and stream:
+                    side_data = False
                     stream = False
-                    ignoreLine = False
-                    # noinspection PyUnboundLocalVariable
                     self.streams.append(FFStream(data_lines))
-                elif stream:
-                    if '[SIDE_DATA]' in line:
-                        ignoreLine = True
-                    elif '[/SIDE_DATA]' in line:
-                        ignoreLine = False
-                    elif ignoreLine == False:
-                        data_lines.append(line)
+                elif '[SIDE_DATA]' in line:
+                    side_data = True
+                    stream = False
+                    side_data_lines = []
+                elif '[/SIDE_DATA]' in line:
+                    side_data = False
+                    stream = False
+                    self.side_data.append(FFSideData(side_data_lines))
+                elif stream and "=" in line:
+                    data_lines.append(line)
+                elif side_data and "=" in line:
+                    side_data_lines.append(line)
 
             self.metadata = {}
             is_metadata = False
@@ -90,7 +95,7 @@ class FFProbe:
                     stream = False
                     self.streams.append(FFStream(data_lines))
                 elif stream:
-                    data_lines.append(line)
+                    data_lines.append(FFStream(line))
 
             p.stdout.close()
             p.stderr.close()
@@ -104,8 +109,11 @@ class FFProbe:
                     self.subtitle.append(stream)
                 elif stream.is_attachment():
                     self.attachment.append(stream)
+
         else:
             raise IOError('No such media file or stream is not responding: ' + self.path_to_video)
+
+        print()
 
     def __repr__(self):
         return "<FFprobe: {metadata}, {video}, {audio}, {subtitle}, {attachment}>".format(**vars(self))
@@ -264,3 +272,20 @@ class FFStream:
             return int(self.__dict__.get('bit_rate', ''))
         except ValueError:
             raise FFProbeError('None integer bit_rate')
+
+
+class FFSideData:
+    """
+    An object representation of the side data in an individual stream in a multimedia file.
+    """
+
+    def __init__(self, data_lines):
+        for line in data_lines:
+            self.__dict__.update({key: value for key, value, *_ in [line.strip().split('=')]})
+
+    def rotation(self):
+        """
+        Returns the rotation as an integer if the stream is a video stream.
+        Returns None if it is not a video stream or the rotation does not exist
+        """
+        return self.__dict__.get('rotation')
